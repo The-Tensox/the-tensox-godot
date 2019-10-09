@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=2]
+
+[ext_resource path="res://networks/World_Sync.gd" type="Script" id=1]
+
+[node name="World_Sync" type="HTTPRequest"]
+script = ExtResource( 1 )
