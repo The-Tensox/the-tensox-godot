@@ -34,9 +34,11 @@ jobs:
           command: |
               mkdir -p linux64
               ./godot --export linux project.godot "linux64/the-tensox-godot"
-      - run:
-          name: Export mac build
-          command: |
-              ./godot --export macOS project.godot "the-tensox-godot"
-              mv the-tensox-godot the-tensox-godot.zip
+    #   - run:
+    #       name: Export mac build
+    #       command: |
+    #           ./godot --export macOS project.godot "the-tensox-godot"
+    #           mv the-tensox-godot the-tensox-godot.zip
+# macOS doesn't work (doesn't seem to be included in the downloaded templates ?)
+# Who care about macOS anyway ?
 # TODO: export to github release
