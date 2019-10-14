@@ -2,8 +2,10 @@ extends HTTPRequest
 
 # TODO: some kind of nice design of a macro level world handler
 # for example it will check if new entities such a new clouds appear ...
-# if there is a new cloud, spawn it then the cloud handle it's network sync itself ....
+# if there is a new cloud, spawn it then the cloud handle it"s network sync itself ....
 var ws = null
+var cube = preload("res://scenes/Cube.tscn")
+var instances = Array()
 
 # Called when the node enters the scene tree for the first time.
 func _ready():
@@ -28,7 +30,7 @@ func _on_HTTPRequest_request_completed( result, response_code, headers, body ):
 func _make_post_request(url, data_to_send, use_ssl):
     # Convert data to json string:
     var query = JSON.print(data_to_send)
-    # Add 'Content-Type' header:
+    # Add "Content-Type" header:
     var headers = ["Content-Type: application/json"]
     $HTTPRequest.request(url, headers, use_ssl, HTTPClient.METHOD_POST, query)	
 
@@ -44,8 +46,39 @@ func _connection_error():
 	print("Connection error")
 	
 func _data_received():
-	var test = ws.get_peer(1).get_packet()
-	print('recieve %s' % test.get_string_from_ascii())
+	var json_string = ws.get_peer(1).get_packet().get_string_from_ascii()
+	var dict
+	dict = parse_json(json_string)
+	var data = dict["data"]
+	var protocol = dict["protocol"]
+	print("Parsed", dict)
+	print("Data", data)
+	print("Protocol", protocol)
+	var instance
+	#if protocol == "POST":
+
+	#elif protocol == "PUT":
+	for i in instances:
+		if i["data"]["id"] == data["id"]:
+			instance = i["instance"]
+			
+	if not instance:
+		instance = cube.instance()
+		instances.push_front({ "data": data, "instance": instance })
+		var scene_root = get_tree().root.get_children()[0]
+		scene_root.add_child(instance)
+	#else:
+	#	print("Uninplemented protocol:", protocol)
+	#print(instance.get_property_list())
+	#instance.global_transform = self.global_transform
+	#instance.scale = Vector3(data["scale_x"], data["scale_y"], data["scale_z"])
+	instance.translation = Vector3(data["position_x"], data["position_y"], data["position_z"])
+	instance.rotation = Vector3(data["rotation_x"], data["rotation_y"], data["rotation_z"])
+	
+	
+
+	
+	
 
 func _process(delta):
 	
@@ -56,5 +89,5 @@ func _process(delta):
 		# ws.get_peer(1).put_var("HI")
 		if ws.get_peer(1).get_available_packet_count() > 0 :
 			var test = ws.get_peer(1).get_var()
-			print('recieve %s' % test)
+			print("recieve %s" % test)
 	"""
