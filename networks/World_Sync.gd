@@ -70,17 +70,25 @@ func _process(delta):
 func _process_data(parsed_json):
 	var data = parsed_json["data"]
 	var protocol = parsed_json["protocol"]
-	var instance
+	var meshInstance
+	print(data)
+
 	for i in range(instances.size()):
-		if instances[i]["data"]["id"] == data["id"]:
-			instance = instances[i]["instance"]
+		if protocol == "DELETE_ALL":
+			meshInstance = instances[i]["instance"]
+			instances.remove(i)
+			meshInstance.queue_free()
+		elif instances[i]["data"]["_id"] == data["_id"]:
+			meshInstance = instances[i]["instance"]
 			if protocol == "DELETE":
 				instances.remove(i)
-				instance.queue_free()
+				meshInstance.queue_free()
 				# return doesn't work in GDScript like other language it seems =)
 		
-	if not instance and protocol != "DELETE":
-		instance = cube.instance()
+	if not meshInstance and protocol != "DELETE":
+		#instance = cube.instance()
+		meshInstance = MeshInstance.new()
+		var mesh
 		# Random color ^^
 		var color = Color(rand_range(0,255), rand_range(0,255), rand_range(0,255))
 		# TODO: fix it doesn't work different color cuz same object = same material
@@ -89,18 +97,47 @@ func _process_data(parsed_json):
 			color = "#663300" # Brown
 		elif data["kind"] == "grass":
 			color = "#003300" # Green
-		instance.get_node("MeshInstance").get_surface_material(0).albedo_color = color
+			
+		#instance.get_node("MeshInstance").get_surface_material(0).albedo_color = color
 		#print(instance.get_node("MeshInstance").material_override)
-		instances.push_front({ "data": data, "instance": instance })
+		match data["mesh"].keys():
+			["Box"]:
+				mesh = CubeMesh.new()
+				var box = data["mesh"]["Box"]
+				var x = box["x"]
+				var y = box["y"]
+				var z = box["z"]
+				mesh.size = Vector3(x, y , z)
+			["Capsule"]:
+				mesh = CapsuleMesh.new()
+				var capsule = data["mesh"]["Capsule"]
+				var height = capsule["height"]
+				var radius = capsule["radius"]
+				mesh.mid_height = height
+				mesh.radius = radius
+			["Array"]:
+				mesh = ArrayMesh.new()
+				var arrays = []
+				var vertex_array = []
+				arrays.resize(Mesh.ARRAY_MAX)
+				var array = data["mesh"]["Array"]
+				for i in array["meshes"]:
+					vertex_array.append(Vector3(i["vertices"][0], i["vertices"][1], i["vertices"][2]))
+				arrays[Mesh.ARRAY_VERTEX] = vertex_array
+				mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+
+		meshInstance.mesh = mesh
+			
+		instances.push_front({ "data": data, "instance": meshInstance })
 		var scene_root = get_tree().root.get_children()[0]
-		scene_root.add_child(instance)
+		scene_root.add_child(meshInstance)
 		
 	#else:
 	#	print("Uninplemented protocol:", protocol)
 	#print(instance.get_property_list())
 	#instance.global_transform = self.global_transform
 	
-	if instance and protocol != "DELETE":
-		instance.scale = Vector3(data["scale_x"], data["scale_y"], data["scale_z"])
-		instance.translation = Vector3(data["position_x"], data["position_y"], data["position_z"])
-		instance.rotation = Vector3(data["rotation_x"], data["rotation_y"], data["rotation_z"])
+	if meshInstance and protocol != "DELETE":
+		meshInstance.scale = Vector3(data["scale_x"], data["scale_y"], data["scale_z"])
+		meshInstance.translation = Vector3(data["position_x"], data["position_y"], data["position_z"])
+		meshInstance.rotation = Vector3(data["rotation_x"], data["rotation_y"], data["rotation_z"])
