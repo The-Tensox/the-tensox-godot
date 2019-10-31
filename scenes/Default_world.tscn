@@ -8,6 +8,16 @@
 [node name="Camera" type="Camera" parent="."]
 transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -12.3104, 3.635, -4.54877 )
 script = ExtResource( 1 )
-max_speed = Vector3( 10, 10, 10 )
+distance = 100.0
+pitch_limit = 40
+max_speed = Vector3( 100, 100, 100 )
+
+[node name="Hud" type="CanvasLayer" parent="Camera"]
+
+[node name="Text" type="TextEdit" parent="Camera/Hud"]
+margin_left = 40.0
+margin_top = 40.0
+margin_right = 250.0
+margin_bottom = 80.0
 
 [node name="World_Sync" parent="." instance=ExtResource( 2 )]

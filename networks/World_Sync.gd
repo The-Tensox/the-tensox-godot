@@ -5,6 +5,8 @@ extends HTTPRequest
 export var HOST = "127.0.0.1"
 export var PORT_REST = "8001"
 export var PORT_WEBSOCKET = "3012"
+export var BATCH_SIZE = 50 # Batch of objects to query
+var index = 0 # We start querying at index 0 objects
 var ws = null
 var cube = preload("res://scenes/Cube.tscn")
 var instances = Array()
@@ -23,19 +25,25 @@ func _ready():
 	print(ws.connect_to_url(websocket_url))
 	
 	# On connection we want to get all the stuff currently in the db
-	request(str("http://", HOST, ":", PORT_REST, "/objects"))
+	request(str("http://", HOST, ":", PORT_REST, "/objects/", index, "/", BATCH_SIZE))
+	#request(str("http://", HOST, ":", PORT_REST, "/objects/count"))
 
-func _on_HTTPRequest_request_completed( result, response_code, headers, body ):
+func _on_HTTPRequest_request_completed( _1, _2, _3, body ):
 	var parsed_json = parse_json(body.get_string_from_utf8())
-	for object in parsed_json:
+	index+=BATCH_SIZE
+	for object in parsed_json["objects"]:
 		_process_data({"data": object, "protocol": "GET"})
+	# While there is objects to GET, we recursively and incrementally query them
+	if parsed_json["items_left"] > 0:
+		request(str("http://", HOST, ":", PORT_REST, "/objects/", index, "/", BATCH_SIZE))	
+	
 	
 func _make_post_request(url, data_to_send, use_ssl):
-    # Convert data to json string:
-    var query = JSON.print(data_to_send)
-    # Add "Content-Type" header:
-    var headers = ["Content-Type: application/json"]
-    $HTTPRequest.request(url, headers, use_ssl, HTTPClient.METHOD_POST, query)	
+	# Convert data to json string:
+	var query = JSON.print(data_to_send)
+	# Add "Content-Type" header:
+	var headers = ["Content-Type: application/json"]
+	request(url, headers, use_ssl, HTTPClient.METHOD_POST, query)	
 
 
 
@@ -54,24 +62,21 @@ func _data_received():
 	dict = parse_json(json_string)
 	_process_data(dict)
 
-func _process(delta):
-	
+func _process(_1):
+	# Debug teleport to mesh
+	if Input.is_key_pressed(KEY_K):
+		if len(instances) > 0:
+			get_parent().get_node("Camera").translation = instances[0]["instance"].translation
+		var pos = get_parent().get_node("Camera").translation
+		get_parent().get_node("Camera").get_node("Hud/Text").text = str("Teleported to ", pos)
 	if ws.get_connection_status() == ws.CONNECTION_CONNECTING || ws.get_connection_status() == ws.CONNECTION_CONNECTED:
 		ws.poll()
-	"""
-	if ws.get_peer(1).is_connected_to_host():
-		# ws.get_peer(1).put_var("HI")
-		if ws.get_peer(1).get_available_packet_count() > 0 :
-			var test = ws.get_peer(1).get_var()
-			print("recieve %s" % test)
-	"""
 
 # TODO: find better name
 func _process_data(parsed_json):
 	var data = parsed_json["data"]
 	var protocol = parsed_json["protocol"]
 	var meshInstance
-	print(data)
 
 	for i in range(instances.size()):
 		if protocol == "DELETE_ALL":
@@ -86,20 +91,18 @@ func _process_data(parsed_json):
 				# return doesn't work in GDScript like other language it seems =)
 		
 	if not meshInstance and protocol != "DELETE":
-		#instance = cube.instance()
 		meshInstance = MeshInstance.new()
 		var mesh
-		# Random color ^^
-		var color = Color(rand_range(0,255), rand_range(0,255), rand_range(0,255))
-		# TODO: fix it doesn't work different color cuz same object = same material
-		# maybe create new material on runtime ...
+		var color
+		
 		if data["kind"] == "ground":
 			color = "#663300" # Brown
 		elif data["kind"] == "grass":
 			color = "#003300" # Green
-			
-		#instance.get_node("MeshInstance").get_surface_material(0).albedo_color = color
-		#print(instance.get_node("MeshInstance").material_override)
+		color = Color(rand_range(0, 1), rand_range(0, 1), rand_range(0, 1))
+		var mat = SpatialMaterial.new()
+		mat.albedo_color = color
+
 		match data["mesh"].keys():
 			["Box"]:
 				mesh = CubeMesh.new()
@@ -108,6 +111,7 @@ func _process_data(parsed_json):
 				var y = box["y"]
 				var z = box["z"]
 				mesh.size = Vector3(x, y , z)
+				mesh.material = mat
 			["Capsule"]:
 				mesh = CapsuleMesh.new()
 				var capsule = data["mesh"]["Capsule"]
@@ -115,27 +119,40 @@ func _process_data(parsed_json):
 				var radius = capsule["radius"]
 				mesh.mid_height = height
 				mesh.radius = radius
+				mesh.material = mat
 			["Array"]:
-				mesh = ArrayMesh.new()
-				var arrays = []
-				var vertex_array = []
-				arrays.resize(Mesh.ARRAY_MAX)
+				print(data["position_x"], data["position_z"])
+				#mesh = ArrayMesh.new()
+				#var arrays = []
+				#var vertex_array = []
+				#arrays.resize(Mesh.ARRAY_MAX)
 				var array = data["mesh"]["Array"]
+				var st = SurfaceTool.new()
+
+				st.begin(Mesh.PRIMITIVE_TRIANGLES)
+				#st.set_material(mat)
 				for i in array["meshes"]:
-					vertex_array.append(Vector3(i["vertices"][0], i["vertices"][1], i["vertices"][2]))
+					#st.add_color(Color(rand_range(0, 1), rand_range(0, 1), rand_range(0, 1)))
+					st.add_vertex(Vector3(i["vertices"][0], i["vertices"][1], i["vertices"][2]))
+					
+					#vertex_array.append(Vector3(i["vertices"][0], i["vertices"][1], i["vertices"][2]))
+				"""
 				arrays[Mesh.ARRAY_VERTEX] = vertex_array
 				mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+				#mesh.lightmap_unwrap(mesh.transform, 1)
+				mesh.regen_normalmaps()
+				"""
+				# Create indices, indices are optional.
+				st.index()
+				st.generate_normals()
+				# Commit to a mesh.
+				mesh = st.commit()
 
 		meshInstance.mesh = mesh
 			
 		instances.push_front({ "data": data, "instance": meshInstance })
 		var scene_root = get_tree().root.get_children()[0]
 		scene_root.add_child(meshInstance)
-		
-	#else:
-	#	print("Uninplemented protocol:", protocol)
-	#print(instance.get_property_list())
-	#instance.global_transform = self.global_transform
 	
 	if meshInstance and protocol != "DELETE":
 		meshInstance.scale = Vector3(data["scale_x"], data["scale_y"], data["scale_z"])
